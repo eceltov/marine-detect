@@ -11,6 +11,7 @@ pre-commit
 pytest
 pytest-cov
 pytest-env
+torch==2.5
 ruff==0.0.292   # If you update Ruff, also change the 'rev' field in .pre-commit-config.yaml
 numpy==1.24.4
 opencv-python==4.8.0.74

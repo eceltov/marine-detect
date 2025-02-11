@@ -20,7 +20,7 @@ import numpy as np
 from PIL import ExifTags, Image
 from tqdm import tqdm
 from ultralytics import YOLO
-
+import pathlib
 
 def save_combined_image(
     images_input_folder_path: str,
@@ -61,6 +61,52 @@ def save_combined_image(
         pass
 
     output_path = os.path.join(output_folder_pred_images, image_name)
+    combined_image = combine_results(np.array(original_image), combined_results)
+    combined_image = cv2.cvtColor(combined_image, cv2.COLOR_BGR2RGB)
+    combined_image = combined_image[..., ::-1]
+    combined_image = Image.fromarray(combined_image)
+    combined_image.save(output_path)
+
+def save_combined_image_with_paths(
+    img_path: str,
+    output_path: str,
+    combined_results: list,
+) -> None:
+    """
+    Saves the results of multiple detections on an image using specified parameters.
+
+    Args:
+        images_input_folder_path (str): Path to the folder containing input images.
+        image_name (str): Name of the input image.
+        output_folder_pred_images (str): Path to the folder where the combined images will be saved.
+        combined_results (list): List of detection results.
+
+    Returns:
+        None
+    """
+    # Open the image and check its orientation
+    original_image = Image.open(img_path)
+
+    try:
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == "Orientation":
+                break
+        exif = dict(original_image._getexif().items())
+
+        if exif[orientation] == 3:
+            original_image = original_image.rotate(180, expand=True)
+        elif exif[orientation] == 6:
+            original_image = original_image.rotate(270, expand=True)
+        elif exif[orientation] == 8:
+            original_image = original_image.rotate(90, expand=True)
+    except (AttributeError, KeyError, IndexError):
+        # cases: image don't have getexif
+        pass
+
+    # create all containing folders if not present
+    output_path_manager = pathlib.Path(output_path)
+    output_path_manager.parent.mkdir(parents=True, exist_ok=True)
+
     combined_image = combine_results(np.array(original_image), combined_results)
     combined_image = cv2.cvtColor(combined_image, cv2.COLOR_BGR2RGB)
     combined_image = combined_image[..., ::-1]
@@ -135,6 +181,37 @@ def predict_on_images(
                 images_output_folder_path,
                 combined_results,
             )
+
+def get_models(model_paths: list[str]):
+    return [YOLO(model_path) for model_path in model_paths]
+
+def predict_on_image(
+    models: list,
+    confs_threshold: list[float],
+    image_input_path: str,
+    image_output_path: str|None = None,
+    save_txt: bool = False,
+    save_conf: bool = False,
+):
+    combined_results = []
+    for i, model in enumerate(models):
+        results = model(
+            image_input_path,
+            conf=confs_threshold[i],
+            save_txt=save_txt,
+            save_conf=save_conf,
+        )
+        combined_results.extend(results)
+
+    if image_output_path != None:
+        save_combined_image_with_paths(
+            image_input_path,
+            image_output_path,
+            combined_results,
+        )
+
+    return combined_results
+
 
 
 def predict_on_video(
